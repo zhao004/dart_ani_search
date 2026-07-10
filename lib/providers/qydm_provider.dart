@@ -5,6 +5,7 @@ import '../models/anime.dart';
 import '../utils/http_client.dart';
 import '../utils/parser.dart';
 import 'base_provider.dart';
+import 'search_policy.dart';
 
 class _QydmPlaybackData {
   const _QydmPlaybackData({
@@ -52,10 +53,13 @@ class QydmProvider implements BaseProvider {
       throw const InvalidQueryParameterException('keyword 参数不能为空');
     }
 
+    final searchPolicy = providerSearchPolicyFor(providerName);
     final html = await httpClient.postText(
       '$_baseUrl/search-',
       data: <String, String>{'wd': cleanedKeyword},
       referer: '$_baseUrl/',
+      timeout: searchPolicy.timeout,
+      retryTimes: searchPolicy.retryTimes,
     );
     final root = buildDocument(html).documentElement!;
     final cards = <String, AnimeCard>{};

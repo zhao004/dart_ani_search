@@ -7,6 +7,7 @@ import '../models/anime.dart';
 import '../utils/http_client.dart';
 import '../utils/parser.dart';
 import 'base_provider.dart';
+import 'search_policy.dart';
 
 class _YhdmoeChapterLocator {
   const _YhdmoeChapterLocator({required this.animeId, required this.episodeId});
@@ -54,9 +55,12 @@ class YhdmoeProvider implements BaseProvider {
       throw const InvalidQueryParameterException('keyword 参数不能为空');
     }
 
+    final searchPolicy = providerSearchPolicyFor(providerName);
     final html = await httpClient.getText(
       '$_baseUrl/search?q=${Uri.encodeQueryComponent(cleanedKeyword)}',
       referer: '$_baseUrl/',
+      timeout: searchPolicy.timeout,
+      retryTimes: searchPolicy.retryTimes,
     );
     final root = buildDocument(html).documentElement!;
     final cards = <String, AnimeCard>{};

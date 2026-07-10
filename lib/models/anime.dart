@@ -187,6 +187,41 @@ class AnimeAggregateSearchResult {
   };
 }
 
+/// 聚合搜索的渐进快照，每个 Provider 完成时都会生成新实例。
+class AnimeAggregateSearchUpdate {
+  /// 创建渐进搜索快照。
+  const AnimeAggregateSearchUpdate({
+    required this.result,
+    this.completedProviders = const <String>[],
+    this.pendingProviders = const <String>[],
+    required this.isComplete,
+  });
+
+  /// 当前已聚合的结果。
+  final AnimeAggregateSearchResult result;
+
+  /// 已完成搜索的 Provider，顺序与请求顺序一致。
+  final List<String> completedProviders;
+
+  /// 尚未完成搜索的 Provider，顺序与请求顺序一致。
+  final List<String> pendingProviders;
+
+  /// 所有 Provider 是否均已结束。
+  final bool isComplete;
+
+  /// 已完成 Provider 数量。
+  int get completedCount => completedProviders.length;
+
+  /// 本次请求 Provider 总数。
+  int get totalProviders => completedProviders.length + pendingProviders.length;
+
+  /// 完成进度，空 Provider 列表按完成处理。
+  double get progress {
+    final total = totalProviders;
+    return total == 0 ? 1 : completedCount / total;
+  }
+}
+
 /// 动漫详情模型。
 class AnimeDetail {
   /// 创建详情模型。

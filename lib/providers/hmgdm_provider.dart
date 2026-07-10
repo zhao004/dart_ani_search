@@ -7,6 +7,7 @@ import '../models/anime.dart';
 import '../utils/http_client.dart';
 import '../utils/parser.dart';
 import 'base_provider.dart';
+import 'search_policy.dart';
 
 class _HmgdmChapterLocator {
   const _HmgdmChapterLocator({required this.playId, required this.episodeId});
@@ -61,9 +62,12 @@ class HmgdmProvider implements BaseProvider {
       throw const InvalidQueryParameterException('keyword 参数不能为空');
     }
 
+    final searchPolicy = providerSearchPolicyFor(providerName);
     final html = await httpClient.getText(
       '$_baseUrl/search?kw=${Uri.encodeComponent(cleanedKeyword)}',
       referer: '$_baseUrl/',
+      timeout: searchPolicy.timeout,
+      retryTimes: searchPolicy.retryTimes,
     );
     final document = buildDocument(html);
     final items = document

@@ -5,6 +5,7 @@ import '../models/anime.dart';
 import '../utils/http_client.dart';
 import '../utils/parser.dart';
 import 'base_provider.dart';
+import 'search_policy.dart';
 
 /// 西瓜卡通 Provider。
 class XgCartoonProvider implements BaseProvider {
@@ -30,9 +31,12 @@ class XgCartoonProvider implements BaseProvider {
       throw const InvalidQueryParameterException('keyword 参数不能为空');
     }
 
+    final searchPolicy = providerSearchPolicyFor(providerName);
     final html = await httpClient.getText(
       '$_baseUrl/search?q=${Uri.encodeQueryComponent(cleanedKeyword)}',
       referer: '$_baseUrl/',
+      timeout: searchPolicy.timeout,
+      retryTimes: searchPolicy.retryTimes,
     );
     final root = buildDocument(html).documentElement!;
     final cards = <String, AnimeCard>{};

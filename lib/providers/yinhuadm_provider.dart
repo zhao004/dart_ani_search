@@ -7,6 +7,7 @@ import '../models/anime.dart';
 import '../utils/http_client.dart';
 import '../utils/parser.dart';
 import 'base_provider.dart';
+import 'search_policy.dart';
 
 /// 银花动漫 Provider。
 class YinHuaDmProvider implements BaseProvider {
@@ -33,9 +34,12 @@ class YinHuaDmProvider implements BaseProvider {
       throw const InvalidQueryParameterException('keyword 参数不能为空');
     }
 
+    final searchPolicy = providerSearchPolicyFor(providerName);
     final html = await httpClient.getText(
       '$_baseUrl/vch/${Uri.encodeComponent(cleanedKeyword)}.html',
       referer: '$_baseUrl/',
+      timeout: searchPolicy.timeout,
+      retryTimes: searchPolicy.retryTimes,
     );
     final document = buildDocument(html);
     final cards = document.querySelectorAll('.module-card-item.module-item');

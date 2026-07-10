@@ -5,19 +5,18 @@ import 'models/anime.dart';
 import 'models/provider.dart';
 import 'providers/base_provider.dart';
 import 'providers/registry.dart';
+import 'providers/search_policy.dart';
 
 /// 统一封装查询类接口的调度逻辑。
 class AnimeQueryService {
   /// 创建查询服务。
-  AnimeQueryService({
-    ProviderRegistry? registry,
-    this.providerTimeout = const Duration(seconds: 20),
-  }) : registry = registry ?? ProviderRegistry();
+  AnimeQueryService({ProviderRegistry? registry, this.providerTimeout})
+    : registry = registry ?? ProviderRegistry();
 
   /// Provider 注册表。
   final ProviderRegistry registry;
 
-  /// 聚合搜索中单个 Provider 的超时时间。
+  /// 测试或调用方显式指定的统一超时；为空时使用 Provider 专属策略。
   final Duration? providerTimeout;
 
   /// 返回 Provider 列表。
@@ -28,43 +27,49 @@ class AnimeQueryService {
     required String keyword,
     Iterable<String>? providerNames,
   }) async {
-    final normalizedKeyword = _normalizeNonEmptyText(keyword, 'keyword');
-    final providers = registry.getProviders(providerNames);
-    if (providers.isEmpty) {
-      throw const ProviderRequestException('没有可用的 Provider 可执行聚合搜索');
+    AnimeAggregateSearchUpdate? finalUpdate;
+    await for (final update in searchAggregateProgress(
+      keyword: keyword,
+      providerNames: providerNames,
+    )) {
+      finalUpdate = update;
     }
 
-    final results = await Future.wait(
-      providers.map(
-        (entry) =>
-            _searchSingleProvider(entry.key, entry.value, normalizedKeyword),
-      ),
+    if (finalUpdate == null) {
+      throw const ProviderRequestException('聚合搜索未返回任何结果');
+    }
+    final result = finalUpdate.result;
+    if (result.succeededProviders.isEmpty) {
+      throw ProviderRequestException(
+        _buildAllFailedMessage(result.failedProviders),
+      );
+    }
+    return result;
+  }
+
+  /// 渐进执行聚合搜索，每个 Provider 结束后立即发送一次有序快照。
+  Stream<AnimeAggregateSearchUpdate> searchAggregateProgress({
+    required String keyword,
+    Iterable<String>? providerNames,
+  }) {
+    late final StreamController<AnimeAggregateSearchUpdate> controller;
+    var cancelled = false;
+    controller = StreamController<AnimeAggregateSearchUpdate>(
+      onListen: () {
+        unawaited(
+          _runAggregateProgress(
+            keyword: keyword,
+            providerNames: providerNames,
+            controller: controller,
+            isCancelled: () => cancelled,
+          ),
+        );
+      },
+      onCancel: () {
+        cancelled = true;
+      },
     );
-
-    final items = <AnimeCard>[];
-    final succeededProviders = <String>[];
-    final failedProviders = <ProviderSearchFailure>[];
-    for (final result in results) {
-      if (result.failure != null) {
-        failedProviders.add(result.failure!);
-        continue;
-      }
-      succeededProviders.add(result.providerName);
-      items.addAll(result.result!.items);
-    }
-
-    if (succeededProviders.isEmpty) {
-      throw ProviderRequestException(_buildAllFailedMessage(failedProviders));
-    }
-
-    return AnimeAggregateSearchResult(
-      keyword: normalizedKeyword,
-      requestedProviders: providers.map((entry) => entry.key).toList(),
-      succeededProviders: succeededProviders,
-      failedProviders: failedProviders,
-      total: items.length,
-      items: items,
-    );
+    return controller.stream;
   }
 
   /// 执行单 Provider 搜索。
@@ -111,9 +116,9 @@ class AnimeQueryService {
   ) async {
     try {
       final future = provider.search(keyword);
-      final result = providerTimeout == null
-          ? await future
-          : await future.timeout(providerTimeout!);
+      final timeout =
+          providerTimeout ?? providerSearchPolicyFor(providerName).timeout;
+      final result = await future.timeout(timeout);
       return _ProviderSearchOutcome(providerName: providerName, result: result);
     } on TimeoutException {
       return _ProviderSearchOutcome(
@@ -137,6 +142,102 @@ class AnimeQueryService {
         ),
       );
     }
+  }
+
+  Future<void> _runAggregateProgress({
+    required String keyword,
+    required Iterable<String>? providerNames,
+    required StreamController<AnimeAggregateSearchUpdate> controller,
+    required bool Function() isCancelled,
+  }) async {
+    try {
+      final normalizedKeyword = _normalizeNonEmptyText(keyword, 'keyword');
+      final providers = registry.getProviders(providerNames);
+      if (providers.isEmpty) {
+        throw const ProviderRequestException('没有可用的 Provider 可执行聚合搜索');
+      }
+
+      final pendingSearches = <String, Future<_ProviderSearchOutcome>>{
+        for (final entry in providers)
+          entry.key: _searchSingleProvider(
+            entry.key,
+            entry.value,
+            normalizedKeyword,
+          ),
+      };
+      final outcomes = <String, _ProviderSearchOutcome>{};
+
+      while (pendingSearches.isNotEmpty) {
+        final outcome = await Future.any(pendingSearches.values);
+        pendingSearches.remove(outcome.providerName);
+        outcomes[outcome.providerName] = outcome;
+        if (isCancelled()) {
+          return;
+        }
+        controller.add(
+          _buildAggregateUpdate(
+            keyword: normalizedKeyword,
+            providers: providers,
+            outcomes: outcomes,
+          ),
+        );
+      }
+    } on Object catch (error, stackTrace) {
+      if (!isCancelled() && !controller.isClosed) {
+        controller.addError(error, stackTrace);
+      }
+    } finally {
+      if (!controller.isClosed) {
+        await controller.close();
+      }
+    }
+  }
+
+  AnimeAggregateSearchUpdate _buildAggregateUpdate({
+    required String keyword,
+    required List<MapEntry<String, BaseProvider>> providers,
+    required Map<String, _ProviderSearchOutcome> outcomes,
+  }) {
+    final requestedProviders = <String>[];
+    final completedProviders = <String>[];
+    final pendingProviders = <String>[];
+    final succeededProviders = <String>[];
+    final failedProviders = <ProviderSearchFailure>[];
+    final items = <AnimeCard>[];
+
+    for (final entry in providers) {
+      final providerName = entry.key;
+      requestedProviders.add(providerName);
+      final outcome = outcomes[providerName];
+      if (outcome == null) {
+        pendingProviders.add(providerName);
+        continue;
+      }
+      completedProviders.add(providerName);
+      final failure = outcome.failure;
+      if (failure != null) {
+        failedProviders.add(failure);
+        continue;
+      }
+      succeededProviders.add(providerName);
+      items.addAll(outcome.result!.items);
+    }
+
+    return AnimeAggregateSearchUpdate(
+      result: AnimeAggregateSearchResult(
+        keyword: keyword,
+        requestedProviders: List<String>.unmodifiable(requestedProviders),
+        succeededProviders: List<String>.unmodifiable(succeededProviders),
+        failedProviders: List<ProviderSearchFailure>.unmodifiable(
+          failedProviders,
+        ),
+        total: items.length,
+        items: List<AnimeCard>.unmodifiable(items),
+      ),
+      completedProviders: List<String>.unmodifiable(completedProviders),
+      pendingProviders: List<String>.unmodifiable(pendingProviders),
+      isComplete: pendingProviders.isEmpty,
+    );
   }
 
   static String _normalizeNonEmptyText(String value, String fieldName) {

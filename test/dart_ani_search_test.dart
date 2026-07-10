@@ -6,6 +6,7 @@ class _FakeProvider implements BaseProvider {
     required this.providerName,
     this.items = const <AnimeCard>[],
     this.error,
+    this.delay = Duration.zero,
   });
 
   @override
@@ -13,9 +14,13 @@ class _FakeProvider implements BaseProvider {
 
   final List<AnimeCard> items;
   final Object? error;
+  final Duration delay;
 
   @override
   Future<AnimeSearchResult> search(String keyword) async {
+    if (delay > Duration.zero) {
+      await Future<void>.delayed(delay);
+    }
     final thrown = error;
     if (thrown != null) {
       throw thrown;
@@ -105,6 +110,69 @@ void main() {
     expect(result.failedProviders.single.provider, 'beta');
     expect(result.failedProviders.single.message, '请求超时');
     expect(result.total, 1);
+  });
+
+  test('渐进聚合先返回快速来源并在最终快照保持注册顺序', () async {
+    final client = AniSearchClient(
+      registry: ProviderRegistry(
+        providers: <String, BaseProvider>{
+          'alpha': _FakeProvider(
+            providerName: 'alpha',
+            delay: const Duration(milliseconds: 80),
+            items: [_card('alpha', 'a1')],
+          ),
+          'beta': _FakeProvider(
+            providerName: 'beta',
+            delay: const Duration(milliseconds: 10),
+            items: [_card('beta', 'b1')],
+          ),
+        },
+      ),
+    );
+
+    final updates = await client.searchProgress(keyword: '海贼王').toList();
+
+    expect(updates, hasLength(2));
+    expect(updates.first.completedProviders, ['beta']);
+    expect(updates.first.pendingProviders, ['alpha']);
+    expect(updates.first.isComplete, isFalse);
+    expect(updates.first.result.items.map((item) => item.provider), ['beta']);
+
+    final finalUpdate = updates.last;
+    expect(finalUpdate.completedProviders, ['alpha', 'beta']);
+    expect(finalUpdate.pendingProviders, isEmpty);
+    expect(finalUpdate.isComplete, isTrue);
+    expect(finalUpdate.result.items.map((item) => item.provider), [
+      'alpha',
+      'beta',
+    ]);
+  });
+
+  test('渐进聚合记录超时来源且兼容 Future 搜索异常', () async {
+    final client = AniSearchClient(
+      providerTimeout: const Duration(milliseconds: 20),
+      registry: ProviderRegistry(
+        providers: const <String, BaseProvider>{
+          'slow': _FakeProvider(
+            providerName: 'slow',
+            delay: Duration(milliseconds: 100),
+          ),
+        },
+      ),
+    );
+
+    final updates = await client.searchProgress(keyword: '海贼王').toList();
+
+    expect(updates, hasLength(1));
+    expect(updates.single.isComplete, isTrue);
+    expect(updates.single.result.succeededProviders, isEmpty);
+    expect(updates.single.result.failedProviders.single.provider, 'slow');
+    expect(updates.single.result.failedProviders.single.message, '搜索超时');
+
+    await expectLater(
+      client.search(keyword: '海贼王'),
+      throwsA(isA<ProviderRequestException>()),
+    );
   });
 
   test('未知 Provider 会抛出明确异常', () {

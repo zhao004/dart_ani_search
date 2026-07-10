@@ -7,6 +7,7 @@ import '../models/anime.dart';
 import '../utils/http_client.dart';
 import '../utils/parser.dart';
 import 'base_provider.dart';
+import 'search_policy.dart';
 
 class _Mxdm2ChapterLocator {
   const _Mxdm2ChapterLocator({
@@ -54,6 +55,7 @@ class Mxdm2Provider implements BaseProvider {
       throw const InvalidQueryParameterException('keyword 参数不能为空');
     }
 
+    final searchPolicy = providerSearchPolicyFor(providerName);
     final payload = await httpClient.getText(
       '$_baseUrl/index.php/ajax/suggest'
       '?mid=1&wd=${Uri.encodeQueryComponent(cleanedKeyword)}&limit=20',
@@ -62,6 +64,8 @@ class Mxdm2Provider implements BaseProvider {
         'Accept': 'application/json',
         'X-Requested-With': 'XMLHttpRequest',
       },
+      timeout: searchPolicy.timeout,
+      retryTimes: searchPolicy.retryTimes,
     );
     final decoded = _decodeJsonObject(payload, 'mxdm2 搜索接口');
     final rawItems = decoded['list'];

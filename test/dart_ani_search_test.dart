@@ -1,4 +1,5 @@
 import 'package:dart_ani_search/dart_ani_search.dart';
+import 'package:dart_ani_search/providers/search_policy.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 class _FakeProvider implements BaseProvider {
@@ -65,6 +66,28 @@ void main() {
       'mxdm2',
       'xgcartoon',
     ]);
+  });
+
+  test('内置 Provider 搜索策略使用专属超时且禁用重试', () {
+    for (final provider in const [
+      'hmgdm',
+      'yinhuadm',
+      'qydm',
+      'yhdmoe',
+      'xgcartoon',
+    ]) {
+      final policy = providerSearchPolicyFor(provider);
+      expect(policy.timeout, const Duration(seconds: 8));
+      expect(policy.retryTimes, 0);
+    }
+
+    final slowPolicy = providerSearchPolicyFor('mxdm2');
+    expect(slowPolicy.timeout, const Duration(seconds: 18));
+    expect(slowPolicy.retryTimes, 0);
+
+    final customPolicy = providerSearchPolicyFor('custom');
+    expect(customPolicy.timeout, const Duration(seconds: 20));
+    expect(customPolicy.retryTimes, 0);
   });
 
   test('Provider 注册表保持顺序并支持逗号参数去重', () {

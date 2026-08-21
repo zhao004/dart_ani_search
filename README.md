@@ -1,6 +1,7 @@
 # dart_ani_search
 
-`dart_ani_search` 是一个 Flutter/Dart 本地动漫聚合搜索与解析包，用于从多个动漫站点获取搜索结果、作品详情、章节列表和播放内容。包内默认注册 6 个动漫源站，并提供统一模型与异常类型，方便上层应用按 Provider 单独查询或做聚合搜索。
+`dart_ani_search` 是一个 Flutter/Dart 本地动漫聚合搜索与解析包，用于从多个动漫站点获取搜索结果、作品详情、章节列表和播放内容。包内默认注册
+6 个动漫源站，并提供统一模型与异常类型，方便上层应用按 Provider 单独查询或做聚合搜索。
 
 > 注意：第三方站点页面结构和访问策略可能随时变化。本包会对请求失败、解析失败、参数错误做明确异常包装，但调用方仍应在产品侧提供降级、重试和错误提示。
 
@@ -17,13 +18,13 @@
 
 当前默认注册表包含 6 个已通过真实链路探测的源站：
 
-| Provider | 类型 | 地址 | 覆盖能力 |
-| --- | --- | --- | --- |
-| `hmgdm` | 动漫站 | <https://hmgdm.com> | 搜索、详情、章节、视频直链 |
-| `yinhuadm` | 动漫站 | <https://www.yinhuadm.cc> | 搜索、详情、章节、视频或 iframe |
-| `qydm` | 动漫站 | <https://www.qydm.cc> | 搜索、详情、章节、播放器 iframe |
-| `yhdmoe` | 动漫站 | <https://yhdmoe.com> | 搜索、详情、章节、视频直链 |
-| `mxdm2` | 动漫站 | <https://www.mxdm2.com> | 搜索、详情、章节、视频直链 |
+| Provider    | 类型  | 地址                         | 覆盖能力                |
+|-------------|-----|----------------------------|---------------------|
+| `hmgdm`     | 动漫站 | <https://hmgdm.com>        | 搜索、详情、章节、视频直链       |
+| `yinhuadm`  | 动漫站 | <https://www.yinhuadm.cc>  | 搜索、详情、章节、视频或 iframe |
+| `qydm`      | 动漫站 | <https://www.qydm.cc>      | 搜索、详情、章节、播放器 iframe |
+| `yhdmoe`    | 动漫站 | <https://yhdmoe.com>       | 搜索、详情、章节、视频直链       |
+| `mxdm2`     | 动漫站 | <https://www.mxdm2.com>    | 搜索、详情、章节、视频直链       |
 | `xgcartoon` | 动漫站 | <https://cn.xgcartoon.com> | 搜索、详情、章节、播放器 iframe |
 
 ## 安装与环境
@@ -81,6 +82,7 @@ Future<void> main() async {
 ## 自定义 Provider
 
 ```dart
+
 final registry = ProviderRegistry(
   providers: <String, BaseProvider>{
     'custom': CustomProvider(),
@@ -88,7 +90,12 @@ final registry = ProviderRegistry(
 );
 
 final client = AniSearchClient(registry: registry);
-final result = await client.search(keyword: '海贼王', providers: ['custom']);
+final result = await
+client.search
+(
+keyword: '海贼王', providers: ['custom'
+]
+);
 ```
 
 自定义 Provider 需要实现：
@@ -162,3 +169,20 @@ test/
 - 新增源站前应先用真实关键词验证搜索、详情、章节和播放内容链路。
 - 无法稳定访问、无法解析章节或无法返回播放内容的源站不应放入默认注册表。
 - 涉及密钥、代理或私有服务时，请使用环境变量，不要硬编码到源码中。
+
+## 免责声明
+
+本项目仅供学习、研究和技术交流使用，不构成对任何第三方站点、内容或服务的推荐、授权或保证。本项目不托管、存储或分发第三方站点内容，仅提供客户端请求与解析能力，实际访问内容由相应第三方站点提供。
+
+使用者应自行确认并遵守所在地区适用的法律法规、版权要求、第三方站点服务条款及访问政策，不得将本项目用于侵权、绕过访问控制、滥用请求或其他违法用途。使用者应自行取得必要授权，并对请求频率、缓存、日志记录及下游展示承担责任。
+
+第三方站点的可用性、内容合法性、准确性、持续性和安全性由其运营方负责。本项目不保证任何站点或解析链路持续可用；在法律允许的范围内，项目作者不对因使用或无法使用本项目产生的任何直接、间接或附带损失承担责任。
+
+## 开源协议
+
+本项目采用 [MIT License](LICENSE) 开源协议。使用、复制、修改或分发本项目时，请保留许可证要求的版权声明和许可声明。项目依赖的第三方软件可能采用其他许可证，相关使用应遵循各自项目的许可证条款。
+
+## 相关链接
+
+- 社区：[Linux.do](https://linux.do/)
+- 更多开源项目：[zhao04 的公开主题](https://linux.do/u/zhao04/activity/topics)
